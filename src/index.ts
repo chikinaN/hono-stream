@@ -67,7 +67,7 @@ app.post("/orders", async (c) => {
 app.post("/create/:id", async (c) => {
   const id = c.req.param("id");
   const order = await prisma.orders.findFirst({
-    where: { order_id: id },
+    where: { order_id: id, is_created: false },
     select: { id: true, OrderItems: { select: { item_id: true } } }
   });
 
