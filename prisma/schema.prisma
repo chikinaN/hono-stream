@@ -39,6 +39,7 @@ model Items {
   id         Int      @id @default(autoincrement())
   item_name  String
   price      Int
+  stock      Int
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
