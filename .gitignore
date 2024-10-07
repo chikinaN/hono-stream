@@ -8,6 +8,8 @@
 .idea/usage.statistics.xml
 .idea/shelf
 .history/
+.clj-kondo/
+.lisp/
 
 # deps
 node_modules/
