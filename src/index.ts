@@ -93,17 +93,11 @@ app.post("/create/:id", async (c) => {
 app.get("/order-display", (c) => {
   return streamSSE(c, async (stream) => {
     const onOrderCreated = (data: any) => {
-      stream.writeSSE({
-        data: JSON.stringify(data),
-        event: "orderCreated",
-      });
+      stream.writeSSE({ data: JSON.stringify(data), event: "orderCreated" });
     };
 
     const onOrderUpdated = (data: any) => {
-      stream.writeSSE({
-        data: JSON.stringify(data),
-        event: "orderUpdated",
-      });
+      stream.writeSSE({ data: JSON.stringify(data), event: "orderUpdated" });
     };
 
     eventEmitter.on("orderCreated", onOrderCreated);
@@ -115,10 +109,7 @@ app.get("/order-display", (c) => {
     };
 
     while (true) {
-      stream.writeSSE({
-        data: "ping",
-        event: "ping",
-      });
+      stream.writeSSE({ data: "ping", event: "ping" });
       await stream.sleep(30000);
     }
   });
