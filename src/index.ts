@@ -22,20 +22,18 @@ app.use("*", cors());
 
 app.post("/orders", async (c) => {
   const ordersReq = await c.req.json<OrdersType>();
+
   const generateID = (isMobile: boolean) => {
     const prefix = isMobile ? "M" : "D";
     return prefix + Math.floor(Math.random() * 1000);
   };
-  const orderID = generateID(!!ordersReq[0].mail);
-  const itemIds = ordersReq.map((r) => {
-    return prisma.items.findFirst({
-      where: {
-        item_name: r.item,
-      },
-      select: {
-        id: true,
-      }
-    })
+
+  const orderID = generateID(!!ordersReq[0]?.mail);
+  const itemIds = await prisma.items.findMany({
+    where: {
+      item_name: { in: ordersReq.map((r) => r.item) },
+    },
+    select: { id: true, item_name: true },
   });
   const order = await prisma.orders.create({
     data: {
@@ -43,75 +41,53 @@ app.post("/orders", async (c) => {
       is_created: false,
       address: ordersReq[0].mail ?? "POS",
     },
-  })
-  ordersReq.forEach(async (r, i) => {
-    const id = (await itemIds[i])?.id;
-    if (id) {
-      await prisma.orderItems.create({
-        data: {
-          order_id: order.id,
-          item_id: id,
-          quantity: r.quantity,
-        },
-      });
-    }
   });
+
+  const orderItemsData = ordersReq
+    .map((r) => {
+      const item = itemIds.find((item) => item.item_name === r.item);
+      return item
+        ? {
+            order_id: order.id,
+            item_id: item.id,
+            quantity: r.quantity,
+          }
+        : null;
+    })
+    .filter((item)=> item !== null);
+
+  if (orderItemsData.length > 0) {
+    await prisma.orderItems.createMany({ data: orderItemsData });
+  }
+
   eventEmitter.emit("orderCreated", { orderID, ordersReq });
-  return c.json({
-    status: "success",
-    order_id: orderID,
-  });
+  return c.json({ status: "success", order_id: orderID });
 });
 
 app.post("/create/:id", async (c) => {
   const id = c.req.param("id");
   const order = await prisma.orders.findFirst({
-    where: {
-      order_id: id,
-    },
-    select: {
-      id: true,
-    }
-  })
-  if (order) {
-    await prisma.orders.update({
-      where: {
-        id: order.id,
-      },
-      data: {
-        is_created: true,
-      },
-    });
-    const updatedOrders = await prisma.orderItems.findMany({
-      where: {
-        order_id: order.id,
-      },
-      select: {
-        item_id: true,
-      }
-    })
-    await prisma.items.updateMany({
-      where: {
-        id: {
-          in: updatedOrders.map((o) => o.item_id),
-        },
-      },
-      data: {
-        stock: {
-          decrement: 1,
-        },
-      },
-    })
-    eventEmitter.emit("orderUpdated", { id, updatedOrders });
-    return c.json({
-      status: "success",
-      updatedOrders,
-    });
+    where: { order_id: id },
+    select: { id: true, OrderItems: { select: { item_id: true } } }
+  });
+
+  if (!order) {
+    return c.json({ status: "error", message: "Order not found" }, 404);
   }
-  return c.json({
-    status: "error",
-    message: "Order not found",
-  }, 404);
+
+  await prisma.orders.update({
+    where: { id: order.id },
+    data: { is_created: true }
+  });
+
+  const itemIds = order.OrderItems.map(o => o.item_id);
+  const updatedOrders = await prisma.items.updateMany({
+    where: { id: { in: itemIds } },
+    data: { stock: { decrement: 1 } }
+  });
+
+  eventEmitter.emit("orderUpdated", { id, updatedOrders });
+  return c.json({ status: "success", updatedOrders });
 });
 
 app.get("/order-display", (c) => {
