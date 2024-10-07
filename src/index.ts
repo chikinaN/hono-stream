@@ -124,21 +124,21 @@ app.get("/order-display", (c) => {
   });
 });
 
-app.get("/stock-display", (c) => {
+app.get("/stock-display", async (c) => {
   const getCrowdLevel = async () => {
     try {
-      const { stdout, stderr } = await execPromise("python crowd_level.py");
+      const { stdout, stderr } = await execPromise("python ./src/crowd_level.py");
       if (stderr) {
         console.error(`stderr: ${stderr}`);
       }
       console.log(`stdout: ${stdout}`);
-      eventEmitter.emit("crowdLevelUpdated", stdout);
-      return stdout;
+      return Number(stdout);
     } catch (error) {
       console.error(`exec error: ${error}`);
       throw error;
     }
   }
+
   const getStack = async () => {
     const stock = await prisma.items.findMany({
       select: {
@@ -149,10 +149,13 @@ app.get("/stock-display", (c) => {
     return stock;
   }
 
+  const stock = await getStack();
+  const crowdLevel = await getCrowdLevel();
+
   return c.json({
-    stock: getStack(),
-    crowdLevel: getCrowdLevel(),
-  })
+    stock,
+    crowdLevel,
+  });
 });
 
 const port = 3000;
