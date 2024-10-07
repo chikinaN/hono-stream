@@ -46,8 +46,6 @@ app.post("/orders", async (c) => {
   })
   ordersReq.forEach(async (r, i) => {
     const id = (await itemIds[i])?.id;
-    console.log(r);
-    console.log(id);
     if (id) {
       await prisma.orderItems.create({
         data: {
@@ -67,27 +65,53 @@ app.post("/orders", async (c) => {
 
 app.post("/create/:id", async (c) => {
   const id = c.req.param("id");
-  const orders = await prisma.orders.findMany({
-    where: { order_id: id },
-  });
-  const updatedOrders = await Promise.all(
-    orders.map(async (order) => {
-      return await prisma.orders.update({
-        where: {
-          id: order.id,
-        },
-        data: {
-          is_created: true,
-        },
-      });
+  const order = await prisma.orders.findFirst({
+    where: {
+      order_id: id,
+    },
+    select: {
+      id: true,
+    }
+  })
+  if (order) {
+    await prisma.orders.update({
+      where: {
+        id: order.id,
+      },
+      data: {
+        is_created: true,
+      },
+    });
+    const updatedOrders = await prisma.orderItems.findMany({
+      where: {
+        order_id: order.id,
+      },
+      select: {
+        item_id: true,
+      }
     })
-  );
-
-  eventEmitter.emit("orderUpdated", { id, updatedOrders });
+    await prisma.items.updateMany({
+      where: {
+        id: {
+          in: updatedOrders.map((o) => o.item_id),
+        },
+      },
+      data: {
+        stock: {
+          decrement: 1,
+        },
+      },
+    })
+    eventEmitter.emit("orderUpdated", { id, updatedOrders });
+    return c.json({
+      status: "success",
+      updatedOrders,
+    });
+  }
   return c.json({
-    status: "success",
-    updatedOrders,
-  });
+    status: "error",
+    message: "Order not found",
+  }, 404);
 });
 
 app.get("/order-display", (c) => {
@@ -95,14 +119,12 @@ app.get("/order-display", (c) => {
     const onOrderCreated = (data: any) => {
       stream.writeSSE({ data: JSON.stringify(data), event: "orderCreated" });
     };
-
     const onOrderUpdated = (data: any) => {
       stream.writeSSE({ data: JSON.stringify(data), event: "orderUpdated" });
     };
 
     eventEmitter.on("orderCreated", onOrderCreated);
     eventEmitter.on("orderUpdated", onOrderUpdated);
-
     stream.close = async () => {
       eventEmitter.off("orderCreated", onOrderCreated);
       eventEmitter.off("orderUpdated", onOrderUpdated);
