@@ -19,6 +19,10 @@ type OrdersType = {
 }[];
 
 app.use("*", cors());
+app.use("*", async (c, next) => {
+  console.log(`${c.req.method} ${c.req.url}`);
+  return next();
+})
 
 app.post("/orders", async (c) => {
   const ordersReq = await c.req.json<OrdersType>();
@@ -138,13 +142,17 @@ app.get("/stock-display", async (c) => {
     return stock;
   }
 
-  const stock = await getStack();
-  const crowdLevel = await getCrowdLevel();
+  try {
+    const stock = await getStack();
+    const crowdLevel = await getCrowdLevel();
 
-  return c.json({
-    stock,
-    crowdLevel,
-  });
+    return c.json({
+      stock,
+      crowdLevel,
+    });
+  } catch (error) {
+    return c.json({ error: "An error occurred" }, 500);
+  }
 });
 
 const port = 3000;
